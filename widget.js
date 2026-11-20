@@ -19,7 +19,6 @@
 :where(.flamego-altcha) {
   --altcha-font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   --altcha-color: #1f2328;
-  --altcha-muted: #656d76;
   --altcha-background: #f6f8fa;
   --altcha-border: #d0d7de;
   --altcha-radius: 8px;
@@ -37,7 +36,6 @@
   place-items: center; box-sizing: border-box; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-check:focus-visible) { outline: 2px solid var(--altcha-accent); outline-offset: 2px; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { flex: 1; }
-:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-note) { display: block; font-size: 11px; color: var(--altcha-muted); }
 :where(.flamego-altcha:not([data-unstyled])[data-state="verifying"]) :where(.altcha-check) {
   border-color: var(--altcha-accent); border-top-color: transparent; border-radius: 50%;
   animation: altcha-spin .8s linear infinite; cursor: default; }
@@ -46,6 +44,10 @@
 :where(.flamego-altcha:not([data-unstyled])[data-state="verified"]) :where(.altcha-check)::after {
   content: ""; width: 5px; height: 10px; margin-top: -2px; border: solid #fff; border-width: 0 2px 2px 0;
   transform: rotate(45deg); }
+:where(.flamego-altcha:not([data-unstyled])[data-state="verified"]) :where(.altcha-box) {
+  border-color: var(--altcha-success); box-shadow: 0 0 0 1px var(--altcha-success); }
+:where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-box) {
+  border-color: var(--altcha-error); box-shadow: 0 0 0 1px var(--altcha-error); }
 :where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-check) { border-color: var(--altcha-error); }
 :where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-text) { color: var(--altcha-error); }
 @keyframes altcha-spin { to { transform: rotate(360deg); } }`;
@@ -57,11 +59,10 @@
   // solve finds the counter for an ALTCHA v3 challenge. It runs one Web Worker
   // per CPU core, up to 8, each trying every n-th counter, so the page never
   // blocks while the browser works.
-  function solve(c, onProgress) {
+  function solve(c) {
     const n = Math.min(8, Math.max(1, navigator.hardwareConcurrency || 1));
     return new Promise((resolve, reject) => {
       const workers = [];
-      let tried = 0;
       let done = false;
       const stop = () => {
         done = true;
@@ -70,18 +71,14 @@
       for (let i = 0; i < n; i++) {
         const w = new Worker(workerURL);
         w.onmessage = (e) => {
-          if (done) return; // A progress report queued before stop().
+          if (done) return; // Another worker already finished.
           const d = e.data;
-          if (d.tried) {
-            tried += d.tried;
-            onProgress(tried);
-          }
           if (d.error) {
             stop();
             reject(new Error(d.error));
           } else if (d.derivedKey) {
             stop();
-            resolve({ counter: d.counter, derivedKey: d.derivedKey, tried });
+            resolve({ counter: d.counter, derivedKey: d.derivedKey });
           }
         };
         w.onerror = (e) => {
@@ -103,12 +100,11 @@
       el.innerHTML = `
 <div class="altcha-box">
   <span class="altcha-check" role="checkbox" aria-checked="false" tabindex="0" aria-label="Verify that you are human"></span>
-  <span class="altcha-text"><span class="altcha-label"></span><span class="altcha-note"></span></span>
+  <span class="altcha-text altcha-label"></span>
 </div>`;
     }
     const check = el.querySelector(".altcha-check");
     const label = el.querySelector(".altcha-label");
-    const note = el.querySelector(".altcha-note");
     let input = el.querySelector("input[name=altcha]");
     if (!input) {
       input = document.createElement("input");
@@ -118,17 +114,15 @@
     }
 
     // The container's data-state (idle, verifying, verified, error) is the
-    // styling hook. The label and note are optional and keep any text the
-    // site wrote for the idle state.
+    // styling hook. The label is optional and keeps any text the site wrote
+    // for the idle state.
     const idleLabel = label?.textContent.trim() || "I'm not a robot";
-    const idleNote = note?.textContent.trim() || "Proof of work, no tracking";
-    function setState(state, text, detail) {
+    function setState(state, text) {
       el.dataset.state = state;
       check.setAttribute("aria-checked", state === "verified" ? "true" : "false");
       if (label) label.textContent = text;
-      if (note) note.textContent = detail;
     }
-    setState("idle", idleLabel, idleNote);
+    setState("idle", idleLabel);
 
     let expiryTimer = null;
     let solving = null;
@@ -137,17 +131,17 @@
     let sent = false;
     // reset throws away the current solution, which works only once. A solve
     // in progress is left to finish, since it will produce a fresh solution.
-    function reset(detail) {
+    function reset() {
       if (solving) return;
       clearTimeout(expiryTimer);
       input.value = "";
-      setState("idle", idleLabel, detail);
+      setState("idle", idleLabel);
     }
 
     function verify() {
       if (el.dataset.state === "verified") return Promise.resolve();
       if (solving) return solving;
-      setState("verifying", "Verifying…", "Your browser is solving a small puzzle");
+      setState("verifying", "Verifying…");
       solving = (async () => {
         try {
           const res = await fetch(el.dataset.challengeUrl, { cache: "no-store" });
@@ -158,9 +152,7 @@
           const serverNow = Date.parse(res.headers.get("Date")) || Date.now();
           const c = await res.json();
           const started = performance.now();
-          const solution = await solve(c, (tried) => {
-            if (note) note.textContent = `Tried ${tried.toLocaleString()} keys`;
-          });
+          const solution = await solve(c);
           const took = Math.round(performance.now() - started);
 
           // A challenge that expired, or is about to, while solving would only
@@ -174,17 +166,17 @@
             challenge: { parameters: c.parameters, signature: c.signature },
             solution: { counter: solution.counter, derivedKey: solution.derivedKey, time: took },
           }));
-          setState("verified", "Verified", `Solved in ${(took / 1000).toFixed(2)} s after ${solution.tried.toLocaleString()} keys`);
+          setState("verified", "Verified");
 
           // Start over shortly before the challenge expires, so a stale
           // solution is never sent. setTimeout cannot wait longer than about
           // 24.8 days, so skip the timer for longer lifetimes.
           if (delay <= 0x7fffffff) {
-            expiryTimer = setTimeout(() => reset("The check expired, click to verify again"), delay);
+            expiryTimer = setTimeout(reset, delay);
           }
         } catch (err) {
           input.value = "";
-          setState("error", "Verification failed", "Click to try again");
+          setState("error", "Verification failed");
           throw err;
         } finally {
           solving = null;
@@ -204,7 +196,7 @@
     // A solution goes back to the browser's page cache with the page, but the
     // server already used it, so start over when the page is shown again.
     window.addEventListener("pageshow", (e) => {
-      if (e.persisted) reset(idleNote);
+      if (e.persisted) reset();
     });
 
     const form = el.closest("form");
@@ -214,7 +206,7 @@
       // Resetting the form also cancels a submit held back while solving.
       form.addEventListener("reset", () => {
         pendingSubmit = null;
-        reset(idleNote);
+        reset();
       });
 
       // Submitting before verifying solves first, then submits. The listener
@@ -230,7 +222,7 @@
       form.addEventListener("submit", (e) => {
         if (sent) {
           sent = false;
-          reset(idleNote);
+          reset();
         }
         if (el.dataset.state === "verified" && !pendingSubmit) {
           sent = true;
