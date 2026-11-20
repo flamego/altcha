@@ -28,14 +28,16 @@
   --altcha-success: #1a7f37;
   --altcha-error: #cf222e;
 }
-:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-box) { display: inline-flex; align-items: center; gap: 12px; min-width: 260px;
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-box) { display: inline-flex; align-items: center; gap: 12px;
   padding: 12px 14px; border: 1px solid var(--altcha-border); border-radius: var(--altcha-radius);
   background: var(--altcha-background); font: var(--altcha-font); color: var(--altcha-color); box-sizing: border-box; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-check) { flex: none; width: 22px; height: 22px; border: 2px solid var(--altcha-check-border);
   border-radius: 4px; background: var(--altcha-check-background); cursor: pointer; display: grid;
   place-items: center; box-sizing: border-box; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-check:focus-visible) { outline: 2px solid var(--altcha-accent); outline-offset: 2px; }
-:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { flex: 1; text-box: trim-both cap alphabetic; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { display: grid; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text > *) { grid-area: 1 / 1; text-box: trim-both cap alphabetic; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-sizer) { visibility: hidden; }
 :where(.flamego-altcha:not([data-unstyled])[data-state="verifying"]) :where(.altcha-check) {
   border-color: var(--altcha-accent); border-top-color: transparent; border-radius: 50%;
   animation: altcha-spin .8s linear infinite; cursor: default; }
@@ -96,11 +98,12 @@
     if (el.dataset.state) return;
     // Sites can supply their own markup: any element with class altcha-check
     // inside the container becomes the control. Otherwise use the default.
-    if (!el.querySelector(".altcha-check")) {
+    const builtin = !el.querySelector(".altcha-check");
+    if (builtin) {
       el.innerHTML = `
 <div class="altcha-box">
   <span class="altcha-check" role="checkbox" aria-checked="false" tabindex="0" aria-label="Verify that you are human"></span>
-  <span class="altcha-text altcha-label"></span>
+  <span class="altcha-text"><span class="altcha-label"></span></span>
 </div>`;
     }
     const check = el.querySelector(".altcha-check");
@@ -118,13 +121,29 @@
     // the container's data-message-* attributes; the idle text otherwise
     // keeps any text the site wrote.
     const msg = el.dataset;
-    const idleLabel = msg.messageIdle || label?.textContent.trim() || "I'm not a robot";
-    function setState(state, text) {
+    const texts = {
+      idle: msg.messageIdle || label?.textContent.trim() || "I'm not a robot",
+      verifying: msg.messageVerifying || "Verifying…",
+      verified: msg.messageVerified || "Verified",
+      error: msg.messageError || "Verification failed",
+    };
+    // The built-in box fits the longest text: hidden copies of every text sit
+    // under the label, so the box does not change width between states.
+    if (builtin) {
+      for (const text of Object.values(texts)) {
+        const sizer = document.createElement("span");
+        sizer.className = "altcha-sizer";
+        sizer.setAttribute("aria-hidden", "true");
+        sizer.textContent = text;
+        label.after(sizer);
+      }
+    }
+    function setState(state) {
       el.dataset.state = state;
       check.setAttribute("aria-checked", state === "verified" ? "true" : "false");
-      if (label) label.textContent = text;
+      if (label) label.textContent = texts[state];
     }
-    setState("idle", idleLabel);
+    setState("idle");
 
     let expiryTimer = null;
     let solving = null;
@@ -137,13 +156,13 @@
       if (solving) return;
       clearTimeout(expiryTimer);
       input.value = "";
-      setState("idle", idleLabel);
+      setState("idle");
     }
 
     function verify() {
       if (el.dataset.state === "verified") return Promise.resolve();
       if (solving) return solving;
-      setState("verifying", msg.messageVerifying || "Verifying…");
+      setState("verifying");
       solving = (async () => {
         try {
           const res = await fetch(el.dataset.challengeUrl, { cache: "no-store" });
@@ -168,7 +187,7 @@
             challenge: { parameters: c.parameters, signature: c.signature },
             solution: { counter: solution.counter, derivedKey: solution.derivedKey, time: took },
           }));
-          setState("verified", msg.messageVerified || "Verified");
+          setState("verified");
 
           // Start over shortly before the challenge expires, so a stale
           // solution is never sent. setTimeout cannot wait longer than about
@@ -178,7 +197,7 @@
           }
         } catch (err) {
           input.value = "";
-          setState("error", msg.messageError || "Verification failed");
+          setState("error");
           throw err;
         } finally {
           solving = null;
