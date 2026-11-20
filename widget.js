@@ -114,9 +114,11 @@
     }
 
     // The container's data-state (idle, verifying, verified, error) is the
-    // styling hook. The label is optional and keeps any text the site wrote
-    // for the idle state.
-    const idleLabel = label?.textContent.trim() || "I'm not a robot";
+    // styling hook. The label is optional. Its text in each state comes from
+    // the container's data-message-* attributes; the idle text otherwise
+    // keeps any text the site wrote.
+    const msg = el.dataset;
+    const idleLabel = msg.messageIdle || label?.textContent.trim() || "I'm not a robot";
     function setState(state, text) {
       el.dataset.state = state;
       check.setAttribute("aria-checked", state === "verified" ? "true" : "false");
@@ -141,7 +143,7 @@
     function verify() {
       if (el.dataset.state === "verified") return Promise.resolve();
       if (solving) return solving;
-      setState("verifying", "Verifying…");
+      setState("verifying", msg.messageVerifying || "Verifying…");
       solving = (async () => {
         try {
           const res = await fetch(el.dataset.challengeUrl, { cache: "no-store" });
@@ -166,7 +168,7 @@
             challenge: { parameters: c.parameters, signature: c.signature },
             solution: { counter: solution.counter, derivedKey: solution.derivedKey, time: took },
           }));
-          setState("verified", "Verified");
+          setState("verified", msg.messageVerified || "Verified");
 
           // Start over shortly before the challenge expires, so a stale
           // solution is never sent. setTimeout cannot wait longer than about
@@ -176,7 +178,7 @@
           }
         } catch (err) {
           input.value = "";
-          setState("error", "Verification failed");
+          setState("error", msg.messageError || "Verification failed");
           throw err;
         } finally {
           solving = null;
