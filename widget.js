@@ -35,7 +35,7 @@
   border-radius: 4px; background: var(--altcha-check-background); cursor: pointer; display: grid;
   place-items: center; box-sizing: border-box; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-check:focus-visible) { outline: 2px solid var(--altcha-accent); outline-offset: 2px; }
-:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { flex: 1; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { flex: 1; text-box: trim-both cap alphabetic; }
 :where(.flamego-altcha:not([data-unstyled])[data-state="verifying"]) :where(.altcha-check) {
   border-color: var(--altcha-accent); border-top-color: transparent; border-radius: 50%;
   animation: altcha-spin .8s linear infinite; cursor: default; }
