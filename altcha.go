@@ -63,12 +63,28 @@ var (
 // solutions.
 type Challenge interface {
 	// HTML returns the HTML that renders the widget. Put it inside a form; the
-	// widget writes its solution to the form field named FieldName.
-	HTML() template.HTML
+	// widget writes its solution to the form field named FieldName. The
+	// optional Messages replace the widget's English texts, such as with
+	// translations from the i18n middleware.
+	HTML(msgs ...Messages) template.HTML
 	// Verify verifies a solution submitted by the widget. Each solution is
 	// accepted at most once. It returns ErrInvalid, ErrExpired, ErrReplayed, or
 	// an error from the ReplayStore.
 	Verify(payload string) error
+}
+
+// Messages are the texts the widget shows in each state. An empty field keeps
+// the English default.
+type Messages struct {
+	// Idle is shown before verifying. Default is "I'm not a robot".
+	Idle string
+	// Verifying is shown while the browser solves the challenge. Default is
+	// "Verifying…".
+	Verifying string
+	// Verified is shown once the challenge is solved. Default is "Verified".
+	Verified string
+	// Error is shown when verifying fails. Default is "Verification failed".
+	Error string
 }
 
 // ReplayStore remembers which solutions were already accepted.
@@ -274,11 +290,24 @@ func (c *challenge) sign(params parameters) string {
 	return hex.EncodeToString(hmacSum(c.signatureKey, body))
 }
 
-func (c *challenge) HTML() template.HTML {
+func (c *challenge) HTML(msgs ...Messages) template.HTML {
 	prefix := template.HTMLEscapeString(c.opts.URLPrefix)
+	var attrs strings.Builder
+	for _, m := range msgs {
+		for _, a := range []struct{ name, value string }{
+			{"idle", m.Idle},
+			{"verifying", m.Verifying},
+			{"verified", m.Verified},
+			{"error", m.Error},
+		} {
+			if a.value != "" {
+				fmt.Fprintf(&attrs, ` data-message-%s="%s"`, a.name, template.HTMLEscapeString(a.value))
+			}
+		}
+	}
 	return template.HTML(fmt.Sprintf(`
-<div class="flamego-altcha" data-challenge-url="%[1]schallenge.json"></div>
-<script src="%[1]swidget.js" defer></script>`, prefix))
+<div class="flamego-altcha" data-challenge-url="%[1]schallenge.json"%[2]s></div>
+<script src="%[1]swidget.js" defer></script>`, prefix, attrs.String()))
 }
 
 func (c *challenge) Verify(payload string) error {

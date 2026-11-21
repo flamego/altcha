@@ -135,6 +135,20 @@ func TestChallenger(t *testing.T) {
 	assert.Equal(t, ErrReplayed.Error(), submit(f, good), "same solution twice")
 }
 
+func TestChallenge_HTMLMessages(t *testing.T) {
+	f := flamego.NewWithLogger(&bytes.Buffer{})
+	f.Use(Challenger(testOptions))
+	f.Get("/", func(c Challenge) string {
+		return string(c.HTML(Messages{Idle: `我不是"机器人"`, Verified: "<b>已验证</b>"}))
+	})
+
+	// Empty fields are left out so the widget keeps its English default, and
+	// values are escaped for the attribute.
+	assert.Equal(t, `
+<div class="flamego-altcha" data-challenge-url="/.altcha/challenge.json" data-message-idle="我不是&#34;机器人&#34;" data-message-verified="&lt;b&gt;已验证&lt;/b&gt;"></div>
+<script src="/.altcha/widget.js" defer></script>`, get(f, "/").Body.String())
+}
+
 func TestVerify_Invalid(t *testing.T) {
 	f := newServer(testOptions)
 	c := fetchChallenge(t, f)

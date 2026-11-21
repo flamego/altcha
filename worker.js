@@ -4,8 +4,7 @@
 
 // Web Worker for widget.js. It solves an ALTCHA v3 PBKDF2 challenge by trying
 // counters start, start+step, start+2*step, ... until the derived key starts
-// with keyPrefix. It reports how many counters it tried about every 100 ms, and
-// posts {counter, derivedKey} when it finds the answer.
+// with keyPrefix, and posts {counter, derivedKey} when it finds the answer.
 const fromHex = (hex) => Uint8Array.from(hex.match(/../g) || [], (b) => parseInt(b, 16));
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -21,22 +20,14 @@ self.onmessage = async (e) => {
     password.set(nonce);
     const view = new DataView(password.buffer);
 
-    let tried = 0;
-    let lastReport = performance.now();
     for (let counter = start; counter <= 0xffffffff; counter += step) {
       view.setUint32(nonce.length, counter);
       const key = await crypto.subtle.importKey("raw", password, "PBKDF2", false, ["deriveBits"]);
       const bits = new Uint8Array(await crypto.subtle.deriveBits(
         { name: "PBKDF2", salt, iterations: p.cost, hash }, key, p.keyLength * 8));
-      tried++;
       if (prefix.every((b, i) => bits[i] === b)) {
-        self.postMessage({ counter, derivedKey: toHex(bits), tried });
+        self.postMessage({ counter, derivedKey: toHex(bits) });
         return;
-      }
-      if (performance.now() - lastReport > 100) {
-        self.postMessage({ tried });
-        tried = 0;
-        lastReport = performance.now();
       }
     }
     throw new Error("no solution found");
