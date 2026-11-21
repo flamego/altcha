@@ -27,6 +27,7 @@
   --altcha-accent: #0969da;
   --altcha-success: #1a7f37;
   --altcha-error: #cf222e;
+  --altcha-muted: #656d76;
 }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-box) { display: inline-flex; align-items: center; gap: 12px;
   padding: 12px 14px; border: 1px solid var(--altcha-border); border-radius: var(--altcha-radius);
@@ -36,7 +37,11 @@
   place-items: center; box-sizing: border-box; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-check:focus-visible) { outline: 2px solid var(--altcha-accent); outline-offset: 2px; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text) { display: grid; }
-:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text > *) { grid-area: 1 / 1; text-box: trim-both cap alphabetic; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-text > *) { grid-area: 1 / 1; align-self: center; display: flex;
+  flex-direction: column; gap: 7px; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-label, .altcha-note) { text-box: trim-both cap alphabetic; }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-note) { font-size: 12px; color: var(--altcha-muted); }
+:where(.flamego-altcha:not([data-unstyled])) :where(.altcha-note:empty) { display: none; }
 :where(.flamego-altcha:not([data-unstyled])) :where(.altcha-sizer) { visibility: hidden; }
 :where(.flamego-altcha:not([data-unstyled])[data-state="verifying"]) :where(.altcha-check) {
   border-color: var(--altcha-accent); border-top-color: transparent; border-radius: 50%;
@@ -51,7 +56,7 @@
 :where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-box) {
   border-color: var(--altcha-error); box-shadow: 0 0 0 1px var(--altcha-error); }
 :where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-check) { border-color: var(--altcha-error); }
-:where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-text) { color: var(--altcha-error); }
+:where(.flamego-altcha:not([data-unstyled])[data-state="error"]) :where(.altcha-label) { color: var(--altcha-error); }
 @keyframes altcha-spin { to { transform: rotate(360deg); } }`;
   document.head.prepend(style);
 
@@ -103,11 +108,12 @@
       el.innerHTML = `
 <div class="altcha-box">
   <span class="altcha-check" role="checkbox" aria-checked="false" tabindex="0" aria-label="Verify that you are human"></span>
-  <span class="altcha-text"><span class="altcha-label"></span></span>
+  <span class="altcha-text"><span class="altcha-message"><span class="altcha-label"></span><span class="altcha-note"></span></span></span>
 </div>`;
     }
     const check = el.querySelector(".altcha-check");
     const label = el.querySelector(".altcha-label");
+    const note = el.querySelector(".altcha-note");
     let input = el.querySelector("input[name=altcha]");
     if (!input) {
       input = document.createElement("input");
@@ -117,9 +123,10 @@
     }
 
     // The container's data-state (idle, verifying, verified, error) is the
-    // styling hook. The label is optional. Its text in each state comes from
-    // the container's data-message-* attributes; the idle text otherwise
-    // keeps any text the site wrote.
+    // styling hook. The label and the note are optional. Their text comes
+    // from the container's data-message-* attributes; the idle text otherwise
+    // keeps any text the site wrote. The note only shows in the error state,
+    // to tell the user how to retry.
     const msg = el.dataset;
     const texts = {
       idle: msg.messageIdle || label?.textContent.trim() || "I'm not a robot",
@@ -127,21 +134,26 @@
       verified: msg.messageVerified || "Verified",
       error: msg.messageError || "Verification failed",
     };
-    // The built-in box fits the longest text: hidden copies of every text sit
-    // under the label, so the box does not change width between states.
+    const retry = msg.messageRetry || "Click to try again";
+    // The built-in box fits its largest state: hidden copies of every state's
+    // text sit under the visible one, so the box keeps the same width and
+    // height in every state, including the two-line error state.
     if (builtin) {
-      for (const text of Object.values(texts)) {
-        const sizer = document.createElement("span");
+      const message = label.parentElement;
+      for (const [state, text] of Object.entries(texts)) {
+        const sizer = message.cloneNode(true);
         sizer.className = "altcha-sizer";
         sizer.setAttribute("aria-hidden", "true");
-        sizer.textContent = text;
-        label.after(sizer);
+        sizer.querySelector(".altcha-label").textContent = text;
+        sizer.querySelector(".altcha-note").textContent = state === "error" ? retry : "";
+        message.after(sizer);
       }
     }
     function setState(state) {
       el.dataset.state = state;
       check.setAttribute("aria-checked", state === "verified" ? "true" : "false");
       if (label) label.textContent = texts[state];
+      if (note) note.textContent = state === "error" ? retry : "";
     }
     setState("idle");
 
