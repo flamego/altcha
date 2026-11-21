@@ -139,13 +139,13 @@ func TestChallenge_HTMLMessages(t *testing.T) {
 	f := flamego.NewWithLogger(&bytes.Buffer{})
 	f.Use(Challenger(testOptions))
 	f.Get("/", func(c Challenge) string {
-		return string(c.HTML(Messages{Idle: `我不是"机器人"`, Verified: "<b>已验证</b>"}))
+		return string(c.HTML(Messages{Idle: `我不是"机器人"`, Verified: "<b>已验证</b>", Retry: "点击重试"}))
 	})
 
 	// Empty fields are left out so the widget keeps its English default, and
 	// values are escaped for the attribute.
 	assert.Equal(t, `
-<div class="flamego-altcha" data-challenge-url="/.altcha/challenge.json" data-message-idle="我不是&#34;机器人&#34;" data-message-verified="&lt;b&gt;已验证&lt;/b&gt;"></div>
+<div class="flamego-altcha" data-challenge-url="/.altcha/challenge.json" data-message-idle="我不是&#34;机器人&#34;" data-message-verified="&lt;b&gt;已验证&lt;/b&gt;" data-message-retry="点击重试"></div>
 <script src="/.altcha/widget.js" defer></script>`, get(f, "/").Body.String())
 }
 

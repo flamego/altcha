@@ -85,6 +85,9 @@ type Messages struct {
 	Verified string
 	// Error is shown when verifying fails. Default is "Verification failed".
 	Error string
+	// Retry is shown under Error to tell the user how to try again. Default
+	// is "Click to try again".
+	Retry string
 }
 
 // ReplayStore remembers which solutions were already accepted.
@@ -299,6 +302,7 @@ func (c *challenge) HTML(msgs ...Messages) template.HTML {
 			{"verifying", m.Verifying},
 			{"verified", m.Verified},
 			{"error", m.Error},
+			{"retry", m.Retry},
 		} {
 			if a.value != "" {
 				fmt.Fprintf(&attrs, ` data-message-%s="%s"`, a.name, template.HTMLEscapeString(a.value))
