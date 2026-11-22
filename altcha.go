@@ -110,8 +110,9 @@ type Options struct {
 	// tries. Default is 5000.
 	Cost int
 	// MaxCounter is the largest counter a challenge can hide, up to
-	// math.MaxUint32. The browser tries MaxCounter/2 counters on average, spread
-	// over its CPU cores. Default is 500.
+	// math.MaxUint32. The browser tries MaxCounter/2 counters on average.
+	// Default is 5000, which takes about 1 second on average and 2 seconds at
+	// most in Chrome on an Apple M4 Pro.
 	MaxCounter int
 	// Expiry is how long a challenge can be solved and submitted. Default is 5
 	// minutes.
@@ -233,7 +234,7 @@ func newChallenge(opts Options) *challenge {
 		opts.Cost = 5000
 	}
 	if opts.MaxCounter <= 0 {
-		opts.MaxCounter = 500
+		opts.MaxCounter = 5000
 	}
 	// A variable, not a constant, so this compiles where int is 32 bits.
 	if maxCounter := uint64(math.MaxUint32); uint64(opts.MaxCounter) > maxCounter {
